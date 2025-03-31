@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dishify</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <img src="{{ url_for('static', filename='chef.png') }}" alt="Logo" class="logo" />
+    <h1>Dishify - Your Personal Chef, One Chat Away!</h1>
+
+    <form id="recipe-form">
+      <input type="text" name="prompt" id="prompt" placeholder="Enter dish or ingredient query here..." />
+      <input type="file" name="image" id="image" accept="image/*" />
+      <button type="submit">Generate Recipe</button>
+    </form>
+
+    <div id="loading">Generating...</div>
+    <div id="response"></div>
+    <button id="playBtn" style="display:none;">🎤 Play The DIY</button>
+    <audio id="audioPlayer" controls style="display:none;"></audio>
+    <div id="highlightedText"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('recipe-form');
+    const responseDiv = document.getElementById('response');
+    const playBtn = document.getElementById('playBtn');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const highlightedText = document.getElementById('highlightedText');
+    const loading = document.getElementById('loading');
+
+    loading.style.display = "none";
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      loading.style.display = "block";
+      responseDiv.innerHTML = "";
+      playBtn.style.display = "none";
+      highlightedText.innerHTML = "";
+
+      const formData = new FormData(form);
+      const res = await fetch('/generate', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.response) {
+        responseDiv.textContent = data.response;
+        playBtn.style.display = "inline-block";
+        playBtn.onclick = () => playTTS(data.response);
+      } else {
+        responseDiv.textContent = data.error || "Something went wrong.";
+      }
+
+      loading.style.display = "none";
+    };
+
+    async function playTTS(text) {
+      const formData = new FormData();
+      formData.append("text", text);
+      const res = await fetch("/tts", { method: "POST", body: formData });
+      const blob = await res.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      audioPlayer.src = audioUrl;
+      audioPlayer.style.display = "block";
+      audioPlayer.play();
+
+      const words = text.split(" ");
+      let i = 0;
+      const delay = 8000 / words.length;
+
+      function animateWords() {
+        if (i < words.length) {
+          let output = "";
+          words.forEach((word, idx) => {
+            if (idx === i) {
+              output += `<b style='color:#f76b1c; font-size:22px;'>${word}</b> `;
+            } else {
+              output += `${word} `;
+            }
+          });
+          highlightedText.innerHTML = `<p style='font-size:18px;'>${output}</p>`;
+          i++;
+          setTimeout(animateWords, delay);
+        }
+      }
+
+      animateWords();
+    }
+  </script>
+</body>
+</html>
