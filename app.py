@@ -28,18 +28,41 @@ if "highlighted_text" not in st.session_state:
 if "play_tts" not in st.session_state:
     st.session_state["play_tts"] = False
 
+if "last_request_time" not in st.session_state:
+    st.session_state["last_request_time"] = 0
+
 # Function to get response from Google Gemini API
 def get_gemini_response(prompt, image=None):
-    model = genai.GenerativeModel("gemini-1.5-pro")
-    if image:
-        response = model.generate_content([prompt, image[0]], stream=True)
-    else:
-        response = model.generate_content([prompt], stream=True)
+    model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
     
-    for chunk in response:
-        for letter in chunk.text:
-            yield letter
-            time.sleep(0.01)
+    max_retries = int(os.getenv("MAX_RETRIES", "3"))
+    retry_delay = 60  # Start with 60 seconds
+    
+    for attempt in range(max_retries):
+        try:
+            if image:
+                response = model.generate_content([prompt, image[0]], stream=True)
+            else:
+                response = model.generate_content([prompt], stream=True)
+            
+            for chunk in response:
+                for letter in chunk.text:
+                    yield letter
+                    time.sleep(0.01)
+            return  # Success, exit the retry loop
+            
+        except Exception as e:
+            if "429" in str(e) or "ResourceExhausted" in str(e):
+                if attempt < max_retries - 1:
+                    st.warning(f"Rate limit hit. Waiting {retry_delay} seconds before retry {attempt + 2}/{max_retries}...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    st.error("Rate limit exceeded. Please try again later or upgrade your API plan.")
+                    yield "Sorry, I'm currently experiencing high demand. Please try again in a few minutes."
+            else:
+                st.error(f"An error occurred: {str(e)}")
+                yield "An error occurred while generating the response."
 
 # Function to handle uploaded images
 def image_image_setup(uploaded_file):
@@ -122,6 +145,17 @@ def main():
     submit = st.button("Generate Recipe")
     
     if submit:
+        # Rate limiting: enforce minimum 10 seconds between requests
+        current_time = time.time()
+        time_since_last = current_time - st.session_state["last_request_time"]
+        min_interval = int(os.getenv("REQUEST_DELAY", "10"))  # seconds
+        
+        if time_since_last < min_interval:
+            wait_time = min_interval - time_since_last
+            st.warning(f"Please wait {wait_time:.1f} more seconds before making another request.")
+            return
+        
+        st.session_state["last_request_time"] = current_time
         st.session_state["response"] = ""
         response_container = st.empty()
 

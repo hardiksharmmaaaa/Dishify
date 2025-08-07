@@ -1,1 +1,4 @@
 .env
+.vscode/
+venv/lib/python3.11/site-packages/google_generativeai-0.8.4.dist-info/.DS_Store
+venv/lib/python3.11/site-packages/pydantic-2.11.1.dist-info/.DS_Store
